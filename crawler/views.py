@@ -5,13 +5,14 @@ from django.views.generic import ListView
 from django.shortcuts import render
 
 import urllib.request
+import traceback
 
-from .models import IngredientSpec, IgnoredWords
-from objetos.models import Ingredient, IngredientNickname
+from .models import IngredientSpec, IgnoredWords, DataWayCooking, DataIngredient
+from objetos.models import Ingredient, IngredientNickname, Recipe, RecipeStep, RecipeIngredient
+from django.contrib.auth.models import User
 from crawler.engine import LinkFinder
 from crawler.engine import IngredientFinder
 from crawler.engine import DataMining
-from crawler.models import DataIngredient
 
 
 
@@ -54,6 +55,8 @@ def delete_spec(request):
 
 def salvar_Ingrediente(request):
     if request.method == 'POST':
+
+        #TODO - VERIFY IF THE WORD ALREADY EXISTS
         new_ingredient = request.POST.get('word')
         ing = Ingredient(description=new_ingredient.title())
         ing.save()
@@ -115,25 +118,27 @@ def run_crawler(request):
 
                 DataParser = IngredientFinder()
                 size = len(parser.links)
-                for link in parser.links:
-                    size -= 1
-                    response = urllib.request.urlopen(link)
-                    html = response.read().decode('utf-8')
-                    DataParser.feed(html)
+                if len(parser.links) > 0:
+                    for link in parser.links:
+                        size -= 1
+                        response = urllib.request.urlopen(link)
+                        html = response.read().decode('utf-8')
+                        DataParser.feed(html)
 
-                print('Found %s ingredients' % DataParser.ingredientes)
-                print('Found %s Steps Cooking' % DataParser.passos)
-                #Mining the data
-                mining = DataMining()
-                ingredients = DataIngredient.objects.all()
-                count = 0
-                for ingredient in ingredients:
-                    mining.analysis(ingredient.ingredient)
-                    count += 1
+                    print('Found %s ingredients' % DataParser.ingredientes)
+                    print('Found %s Steps Cooking' % DataParser.passos)
+                    #Mining the data
+                    mining = DataMining()
+                    ingredients = DataIngredient.objects.all()
+                    count = 0
+                    for ingredient in ingredients:
+                        mining.analysis(ingredient.ingredient)
+                        count += 1
 
-                mining.save_to_db()
+                    mining.save_to_db()
             except Exception as e:
-                message = str(e)            
+                print(e)
+                message = str(e)           
 
     return render(request, 'crawler/home.html', {'message':message})
 
@@ -156,6 +161,57 @@ def vinculate(request):
         return HttpResponseRedirect('/crawl/list')
     except:
         return HttpResponseServerError("Error during process")
+
+def save_recipe(request):
+    user = User.objects.first()
+    recipes_raw = DataWayCooking.objects.values('recipe').distinct()
+    for object_recipe in recipes_raw:
+        recipe = str(object_recipe['recipe'])
+        modelRecipe = Recipe(
+            language='PT',
+            title=recipe,
+            description=recipe,
+            creator = user
+            )
+        steps = ''
+        modelRecipe.save()
+
+        steps = DataWayCooking.objects.filter(recipe__contains=recipe).values('description')
+        for step in steps:
+            if step != None:
+                ModelStep = RecipeStep(recipe=modelRecipe, step=step['description'].encode('UTF-8'))
+                ModelStep.save()
+        
+        ingredients = ingredients = Ingredient.objects.extra(select={'length':'Length(description)'}).order_by('-length')
+        ingredientsData = DataIngredient.objects.filter(recipe__contains=recipe).values('ingredient')
+        for dataIngredient in ingredientsData:
+            if dataIngredient != None:
+                for ingredientModel in ingredients:
+                    found = False
+                    if ingredientModel.description.upper() in dataIngredient['ingredient'].upper():
+                        recipe_ingredient = RecipeIngredient(ingredient=ingredientModel,
+                            recipe=modelRecipe,
+                            description=dataIngredient['ingredient'].encode('UTF-8'))
+                        recipe_ingredient.save()
+                        found = True
+                    if not found:
+                        nicknames = IngredientNickname.objects.filter(ingredient_id=ingredientModel.id)
+                        for nick in nicknames:
+                            if nick.nickname.upper() in dataIngredient['ingredient'].upper():
+                                recipe_ingredient = RecipeIngredient(ingredient=ingredientModel,
+                                    recipe=modelRecipe,
+                                    description=dataIngredient['ingredient'].encode('UTF-8'))
+                                recipe_ingredient.save()
+                                found = True
+                    if found:
+                        break
+    #clean the tables
+    DataWayCooking.objects.all().delete()
+    DataIngredient.objects.all().delete()
+    DataWayCooking.objects.all().delete()
+    IgnoredWords.objects.all().delete()
+
+    return HttpResponseRedirect('/crawl/list')
 
 
     

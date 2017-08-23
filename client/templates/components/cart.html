@@ -1,0 +1,89 @@
+{% verbatim %}
+Vue.component('cart-item',{
+	props: ['ingredient', 'isAdd'],
+
+	template: '<span> \
+	<div class="row"> \
+		<div class="col-xs-7"> \
+			{{ingredient.description}} - {{ingredient.id}} \
+		</div> \
+		<div class="col-xs-5"> \
+			<button class="btn btn-success" v-if="isAdd" v-on:click="AddItem"> Add </button> \
+			<button class="btn btn-danger" v-if="!isAdd" v-on:click="RemoveItem"> Remove </button> \
+		</div> \
+	</div> \
+	</span> ',
+	methods: {
+		AddItem: function(){
+			this.$emit('AddItem');
+		},
+		RemoveItem: function(){
+			this.$emit('RemoveItem');
+		}
+	}
+})
+
+Vue.component('cart', {
+	template: ' \
+	<div id="cart"> \
+		{{Title}} \
+		<input type="text" v-model="ingredient_search" id="ingredient_search" v-on:keyup="Filter" /> \
+		<br/> \
+		<br/> \
+		<button type="button" v-on:click="Search" class="btn btn-info btn-block">Pesquisar</button> \
+		<div v-show="SelectedIngredients.length > 0"> \
+		{{SelectedTitle}} \
+		<cart-item v-for="i in SelectedIngredients" :ingredient="i" v-on:RemoveItem="Remove(i)" v-if="i.visible" 	></cart-item> \
+		</div> \
+		<hr> \
+		<ul> \
+			<cart-item  v-for="i in Ingredients" :ingredient="i" v-on:AddItem="Add(i)" :isAdd="true" v-if="i.visible && !i.onCart" ></cart-item> \
+		</ul> \
+	</div>',
+	props: ['Ingredients', 'SelectedIngredients'],
+	data: function(){
+		return {
+			Title: "Carrinho de ingredients",
+			SelectedTitle: "Selecionados",
+			ingredient_search: ''
+		}
+	},
+	methods: {
+		Add: function(p){
+			this.$emit('Add', p);
+		},
+		Remove: function(i){
+			this.$emit('Remove', i);
+		},
+		Filter: function(){
+			var self = this;
+			if(self.ingredient_search !== undefined && self.ingredient_search !== ""){
+				self.Ingredients.map(function(ing){
+					if(ing.description.toUpperCase().includes(self.ingredient_search.toUpperCase()))
+					{
+						ing.visible = true;
+					}
+					else{
+						ing.visible = false;
+					}
+				});	
+				self.SelectedIngredients.map(function(ing){
+					if(ing.description.toUpperCase().includes(self.ingredient_search.toUpperCase()))
+					{
+						ing.visible = true;
+					}else{
+						ing.visible = false;
+					}
+				});
+			}else{
+				self.Ingredients.map(function(ing){
+					ing.visible = true;
+				});
+			}
+		},
+		Search: function(){
+			this.$emit('Search');
+		}
+	}
+});
+{% endverbatim %}
